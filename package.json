@@ -1,0 +1,16 @@
+{
+  "name": "youplay",
+  "version": "1.0.0",
+  "description": "a fullstack app like youtube",
+  "keywords": [
+    "javascript",
+    "backend"
+  ],
+  "license": "ISC",
+  "author": "Divya Dawda",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
