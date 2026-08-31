@@ -1,0 +1,4 @@
+name: youplay
+values:
+  - key: server
+    value: ''
