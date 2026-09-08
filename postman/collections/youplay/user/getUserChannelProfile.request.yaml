@@ -1,0 +1,8 @@
+$kind: http-request
+description: ""
+url: "{{server}}/users/c/one"
+method: GET
+body:
+  type: json
+  content: ""
+order: 4498068346210684
