@@ -12,16 +12,7 @@ import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js
 const getAllVideos = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10, query, sortBy = "createdAt", sortType = "desc", userId } = req.query
 
-    const pipeline = []
-
     const matchConditions = {}
-
-    if (query && query.trim() !== "") {
-        matchConditions.$or = [
-            { title: { $regex: query.trim(), $options: "i" } },
-            { description: { $regex: query.trim(), $options: "i" } }
-        ]
-    }
 
     if (userId) {
         if (!isValidObjectId(userId)) {
@@ -34,31 +25,63 @@ const getAllVideos = asyncHandler(async (req, res) => {
         matchConditions.isPublished = true
     }
 
-    pipeline.push({ $match: matchConditions })
+    if (query && query.trim() !== "") {
+        const trimmed = query.trim()
+        const cleanQuery = trimmed.replace(/^@/, '')
+        const escapedClean = cleanQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const escapedRaw = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-    pipeline.push({
-        $lookup: {
-            from: "users",
-            localField: "owner",
-            foreignField: "_id",
-            as: "owner",
-            pipeline: [
-                {
-                    $project: {
-                        username: 1,
-                        fullname: 1,
-                        avatar: 1
-                    }
-                }
+        const searchRegex = { $regex: escapedClean, $options: "i" }
+        const rawRegex = { $regex: escapedRaw, $options: "i" }
+
+        if (userId) {
+            matchConditions.$or = [
+                { title: rawRegex },
+                { description: rawRegex }
+            ]
+        } else {
+            const matchingUsers = await User.find({
+                $or: [
+                    { username: searchRegex },
+                    { fullname: searchRegex }
+                ]
+            }).select("_id")
+
+            const matchingUserIds = matchingUsers.map((u) => u._id)
+
+            matchConditions.$or = [
+                { title: rawRegex },
+                { description: rawRegex },
+                { owner: { $in: matchingUserIds } }
             ]
         }
-    })
+    }
 
-    pipeline.push({
-        $addFields: {
-            owner: { $first: "$owner" }
+    const pipeline = [
+        { $match: matchConditions },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                pipeline: [
+                    {
+                        $project: {
+                            username: 1,
+                            fullname: 1,
+                            avatar: 1
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $addFields: {
+                owner: { $first: "$owner" }
+            }
         }
-    })
+    ]
 
     const sortDirection = sortType?.toLowerCase() === "asc" ? 1 : -1
     const sortField = sortBy || "createdAt"
