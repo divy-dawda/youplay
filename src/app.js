@@ -36,4 +36,18 @@ app.use("/api/v1/likes", likeRouter)
 app.use("/api/v1/playlist", playlistRouter)
 app.use("/api/v1/dashboard", dashboardRouter)
 
+// global error handling middleware
+app.use((err, req, res, next) => {
+    const statusCode = err.statusCode || (res.statusCode && res.statusCode !== 200 ? res.statusCode : 500);
+    const message = err.message || "Something went wrong";
+
+    return res.status(statusCode).json({
+        statusCode,
+        data: null,
+        message,
+        success: false,
+        errors: err.errors || []
+    });
+});
+
 export {app}

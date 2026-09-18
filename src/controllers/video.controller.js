@@ -7,7 +7,7 @@ import { Playlist } from "../models/playlist.models.js"
 import { ApiError } from "../utils/apiError.js"
 import { ApiResponse } from "../utils/apiResponse.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
-import { uploadOnCloudinary } from "../utils/cloudinary.js"
+import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js"
 
 const getAllVideos = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10, query, sortBy = "createdAt", sortType = "desc", userId } = req.query
@@ -104,27 +104,35 @@ const publishAVideo = asyncHandler(async (req, res) => {
     const thumbnail = await uploadOnCloudinary(thumbnailLocalPath)
 
     if (!videoFile || !videoFile.url) {
+        if (thumbnail?.url) await deleteFromCloudinary(thumbnail.url, "image");
         throw new ApiError(500, "Failed to upload video file to cloud storage")
     }
     if (!thumbnail || !thumbnail.url) {
+        if (videoFile?.url) await deleteFromCloudinary(videoFile.url, "video");
         throw new ApiError(500, "Failed to upload thumbnail to cloud storage")
     }
 
-    const video = await Video.create({
-        title: title.trim(),
-        description: description.trim(),
-        videoFile: videoFile.url,
-        thumbnail: thumbnail.url,
-        duration: videoFile.duration || 0,
-        owner: req.user._id,
-        isPublished: true
-    })
+    try {
+        const video = await Video.create({
+            title: title.trim(),
+            description: description.trim(),
+            videoFile: videoFile.url,
+            thumbnail: thumbnail.url,
+            duration: videoFile.duration || 0,
+            owner: req.user._id,
+            isPublished: true
+        })
 
-    const createdVideo = await Video.findById(video._id)
+        const createdVideo = await Video.findById(video._id)
 
-    return res
-        .status(201)
-        .json(new ApiResponse(201, createdVideo, "Video published successfully"))
+        return res
+            .status(201)
+            .json(new ApiResponse(201, createdVideo, "Video published successfully"))
+    } catch (error) {
+        await deleteFromCloudinary(videoFile.url, "video")
+        await deleteFromCloudinary(thumbnail.url, "image")
+        throw new ApiError(500, error?.message || "Something went wrong while publishing the video")
+    }
 })
 
 const getVideoById = asyncHandler(async (req, res) => {
@@ -137,6 +145,12 @@ const getVideoById = asyncHandler(async (req, res) => {
     await Video.findByIdAndUpdate(videoId, {
         $inc: { views: 1 }
     })
+
+    if (req.user?._id) {
+        await User.findByIdAndUpdate(req.user._id, {
+            $addToSet: { watchHistory: videoId }
+        })
+    }
 
     const video = await Video.aggregate([
         {
@@ -251,6 +265,9 @@ const updateVideo = asyncHandler(async (req, res) => {
         if (!thumbnail || !thumbnail.url) {
             throw new ApiError(500, "Failed to upload thumbnail")
         }
+        if (video.thumbnail) {
+            await deleteFromCloudinary(video.thumbnail, "image")
+        }
         updateFields.thumbnail = thumbnail.url
     }
 
@@ -289,6 +306,14 @@ const deleteVideo = asyncHandler(async (req, res) => {
         throw new ApiError(403, "You do not have permission to delete this video")
     }
 
+    // Delete video and thumbnail files from Cloudinary
+    if (video.videoFile) {
+        await deleteFromCloudinary(video.videoFile, "video")
+    }
+    if (video.thumbnail) {
+        await deleteFromCloudinary(video.thumbnail, "image")
+    }
+
     await Video.findByIdAndDelete(videoId)
     await Comment.deleteMany({ video: videoId })
     await Like.deleteMany({ video: videoId })
@@ -296,6 +321,12 @@ const deleteVideo = asyncHandler(async (req, res) => {
         {},
         {
             $pull: { videos: videoId }
+        }
+    )
+    await User.updateMany(
+        {},
+        {
+            $pull: { watchHistory: videoId }
         }
     )
 

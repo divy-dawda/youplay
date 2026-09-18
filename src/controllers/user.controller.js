@@ -1,7 +1,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js"
 import { ApiError } from "../utils/apiError.js"
 import { User } from "../models/user.models.js"
-import { uploadOnCloudinary } from "../utils/cloudinary.js"
+import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/apiResponse.js"
 import jwt from "jsonwebtoken"
 import mongoose from "mongoose"
@@ -82,6 +82,8 @@ const registerUser = asyncHandler( async (req, res) => {
     )
 
     if(!createdUser){
+        if (avatar?.url) await deleteFromCloudinary(avatar.url, "image")
+        if (coverImage?.url) await deleteFromCloudinary(coverImage.url, "image")
         throw new ApiError(500, "Something went wrong while registering the user")
     }
 
@@ -124,7 +126,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
     const options = {
         httpOnly: true,
-        secure: true
+        secure: process.env.NODE_ENV === "production"
     }
 
     return res.status(200).cookie("accessToken", accessToken, options).cookie("refreshToken", refreshToken, options).json(
@@ -153,7 +155,7 @@ const logoutUser = asyncHandler(async(req, res) => {
 
     const options = {
         httpOnly: true,
-        secure: true
+        secure: process.env.NODE_ENV === "production"
     }
 
     return res.status(200).clearCookie("accessToken", options).clearCookie("refreshToken", options).json(new ApiResponse(200, {}, "User logged out"))
@@ -181,7 +183,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     
         const options = {
             httpOnly: true,
-            secure: true
+            secure: process.env.NODE_ENV === "production"
         }
     
         const {accessToken, newRefreshToken} = await generateAccessAndRefreshTokens(user._id)
@@ -223,7 +225,9 @@ const changeCurrentPassword = asyncHandler(async(req, res) => {
 const getCurrentUser = asyncHandler(async(req, res) => {
     return res
     .status(200)
-    .json(200, req.user, "Current user fetched successfully")
+    .json(
+        new ApiResponse(200, req.user, "Current user fetched successfully")
+    )
 })
 
 const updateAccountDetails = asyncHandler(async(req, res) => {
@@ -233,7 +237,7 @@ const updateAccountDetails = asyncHandler(async(req, res) => {
         throw new ApiError(400, "All fields are required")
     }
 
-    const user = User.findByIdAndUpdate(
+    const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set: {
@@ -262,6 +266,11 @@ const updateUserAvatar = asyncHandler(async(req, res) => {
 
     if(!avatar.url){
         throw new ApiError(400, "Error while uploading on avatar")
+    }
+
+    const oldAvatarUrl = req.user?.avatar
+    if (oldAvatarUrl) {
+        await deleteFromCloudinary(oldAvatarUrl, "image")
     }
 
     const user = await User.findByIdAndUpdate(
@@ -294,6 +303,11 @@ const updateUserCoverImage = asyncHandler(async(req, res) => {
 
     if(!coverImage.url){
         throw new ApiError(400, "Error while uploading on avatar")
+    }
+
+    const oldCoverImageUrl = req.user?.coverImage
+    if (oldCoverImageUrl) {
+        await deleteFromCloudinary(oldCoverImageUrl, "image")
     }
 
     const user = await User.findByIdAndUpdate(

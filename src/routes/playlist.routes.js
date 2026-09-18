@@ -7,24 +7,19 @@ import {
     getUserPlaylists,
     removeVideoFromPlaylist,
     updatePlaylist,
-} from "../controllers/playlist.controller.js"
-import {verifyJWT} from "../middlewares/auth.middleware.js"
+} from "../controllers/playlist.controller.js";
+import { verifyJWT, optionalVerifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
-router.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
+// Public: View playlist or user's public playlists
+router.route("/:playlistId").get(optionalVerifyJWT, getPlaylistById);
+router.route("/user/:userId").get(optionalVerifyJWT, getUserPlaylists);
 
-router.route("/").post(createPlaylist)
+// Secured routes
+router.route("/").post(verifyJWT, createPlaylist);
+router.route("/:playlistId").patch(verifyJWT, updatePlaylist).delete(verifyJWT, deletePlaylist);
+router.route("/add/:videoId/:playlistId").patch(verifyJWT, addVideoToPlaylist);
+router.route("/remove/:videoId/:playlistId").patch(verifyJWT, removeVideoFromPlaylist);
 
-router
-    .route("/:playlistId")
-    .get(getPlaylistById)
-    .patch(updatePlaylist)
-    .delete(deletePlaylist);
-
-router.route("/add/:videoId/:playlistId").patch(addVideoToPlaylist);
-router.route("/remove/:videoId/:playlistId").patch(removeVideoFromPlaylist);
-
-router.route("/user/:userId").get(getUserPlaylists);
-
-export default router
+export default router;
