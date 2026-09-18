@@ -19,17 +19,15 @@ export default function TweetsPage() {
   const fetchTweets = async () => {
     setLoading(true);
     try {
-      // If user logged in, fetch user's tweets; otherwise show sample or community tweets
-      if (user?._id) {
-        const res = await tweetApi.getUserTweets(user._id);
-        if (res?.data) {
-          setTweets(res.data);
-        }
+      const res = await tweetApi.getAllTweets();
+      if (res?.data) {
+        setTweets(res.data);
       } else {
         setTweets([]);
       }
     } catch (err) {
       console.error('Failed to load tweets:', err);
+      setTweets([]);
     } finally {
       setLoading(false);
     }

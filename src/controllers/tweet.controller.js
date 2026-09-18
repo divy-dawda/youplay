@@ -162,9 +162,79 @@ const deleteTweet = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, { tweetId }, "Tweet deleted successfully"))
 })
 
+const getAllTweets = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 20 } = req.query
+
+    const tweets = await Tweet.aggregate([
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                pipeline: [
+                    {
+                        $project: {
+                            username: 1,
+                            fullname: 1,
+                            avatar: 1
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "tweet",
+                as: "likes"
+            }
+        },
+        {
+            $addFields: {
+                owner: {
+                    $first: "$owner"
+                },
+                likesCount: {
+                    $size: "$likes"
+                },
+                isLiked: {
+                    $cond: {
+                        if: { $in: [req.user?._id, "$likes.likedBy"] },
+                        then: true,
+                        else: false
+                    }
+                }
+            }
+        },
+        {
+            $project: {
+                likes: 0
+            }
+        },
+        {
+            $sort: {
+                createdAt: -1
+            }
+        },
+        {
+            $skip: (parseInt(page, 10) - 1) * parseInt(limit, 10)
+        },
+        {
+            $limit: parseInt(limit, 10)
+        }
+    ])
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, tweets, "Community posts fetched successfully"))
+})
+
 export {
     createTweet,
     getUserTweets,
+    getAllTweets,
     updateTweet,
     deleteTweet
 }

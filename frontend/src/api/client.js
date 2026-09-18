@@ -165,6 +165,7 @@ export const likeApi = {
 
 // Tweet APIs
 export const tweetApi = {
+  getAllTweets: () => request('/tweets'),
   createTweet: (content) => request('/tweets', { method: 'POST', body: { content } }),
   getUserTweets: (userId) => request(`/tweets/user/${userId}`),
   updateTweet: (tweetId, content) => request(`/tweets/${tweetId}`, { method: 'PATCH', body: { content } }),
