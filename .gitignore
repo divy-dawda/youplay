@@ -118,4 +118,6 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-# End of https://mrkandreev.name/snippets/gitignore-generator/#Node
+# Windows Alternate Data Streams
+*Zone.Identifier*
+*:Zone.Identifier*

@@ -15,6 +15,13 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(!user);
 
   const fetchCurrentUser = useCallback(async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    if (!token) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await userApi.getCurrentUser();
       if (response?.data) {

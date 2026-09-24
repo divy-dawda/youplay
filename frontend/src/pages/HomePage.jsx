@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { videoApi } from '../api/client';
 import VideoCard from '../components/video/VideoCard';
-import { Film, Compass, Flame, Radio, Gamepad2, Code, Music2, AlertCircle } from 'lucide-react';
+import { Film, Compass, Flame, Radio, Gamepad2, Code, Music2, AlertCircle, RotateCw } from 'lucide-react';
 
 const CATEGORIES = [
   'All',
@@ -94,9 +94,18 @@ export default function HomePage() {
 
       {/* Error state */}
       {error && (
-        <div className="flex items-center gap-3 p-4 bg-rose-950/40 border border-rose-900/60 rounded-2xl text-rose-300 text-sm">
-          <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
-          <span>{error}</span>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-rose-950/40 border border-rose-900/60 rounded-2xl text-rose-300 text-sm">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={fetchVideos}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600/30 hover:bg-rose-600/50 text-rose-200 border border-rose-500/40 text-xs font-semibold transition-colors shrink-0 cursor-pointer"
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+            <span>Try Again</span>
+          </button>
         </div>
       )}
 
@@ -116,7 +125,7 @@ export default function HomePage() {
             </div>
           ))}
         </div>
-      ) : videos.length === 0 ? (
+      ) : error ? null : videos.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
           <div className="w-16 h-16 rounded-2xl bg-slate-800/60 flex items-center justify-center text-slate-400">
             <Film className="w-8 h-8" />

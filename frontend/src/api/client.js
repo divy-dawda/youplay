@@ -2,7 +2,7 @@
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
-async function request(endpoint, options = {}) {
+async function request(endpoint, options = {}, retries = 1) {
   const url = `${API_BASE}${endpoint}`;
   
   const headers = options.headers ? { ...options.headers } : {};
@@ -26,6 +26,12 @@ async function request(endpoint, options = {}) {
 
   try {
     const response = await fetch(url, config);
+
+    // If server is rate limiting or waking up (Render cold-start), automatically retry once
+    if ((response.status === 429 || response.status === 503) && retries > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      return request(endpoint, options, retries - 1);
+    }
     
     // Safely parse JSON or text without throwing SyntaxError
     const contentType = response.headers.get('content-type') || '';
@@ -81,11 +87,14 @@ async function request(endpoint, options = {}) {
           case 409:
             message = 'A user or item with this information already exists.';
             break;
+          case 429:
+            message = 'The server is temporarily busy or waking up from sleep. Please wait a moment and try again.';
+            break;
           case 500:
           case 502:
           case 503:
           case 504:
-            message = 'Server is currently experiencing an issue. Please try again shortly.';
+            message = 'Server is currently experiencing an issue or waking up. Please try again shortly.';
             break;
           default:
             message = `Request could not be completed (Status ${response.status}).`;
@@ -101,6 +110,10 @@ async function request(endpoint, options = {}) {
     return data || {};
   } catch (error) {
     if (error.name === 'TypeError' && error.message.toLowerCase().includes('fetch')) {
+      if (retries > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        return request(endpoint, options, retries - 1);
+      }
       const netErr = new Error('Unable to connect to the YouPlay server. Please check your network connection.');
       netErr.status = 0;
       throw netErr;
