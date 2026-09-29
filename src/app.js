@@ -71,8 +71,17 @@ app.get("/", (req, res) => {
 
 // global error handling middleware
 app.use((err, req, res, next) => {
-    const statusCode = err.statusCode || (res.statusCode && res.statusCode !== 200 ? res.statusCode : 500);
-    const message = err.message || "Something went wrong";
+    let statusCode = err.statusCode || (res.statusCode && res.statusCode !== 200 ? res.statusCode : 500);
+    let message = err.message || "Something went wrong";
+
+    if (err.name === "MulterError") {
+        statusCode = 400;
+        if (err.code === "LIMIT_FILE_SIZE") {
+            message = "Uploaded file exceeds the maximum allowed limit of 100 MB. Please choose a smaller file.";
+        } else {
+            message = `File upload error: ${err.message}`;
+        }
+    }
 
     return res.status(statusCode).json({
         statusCode,

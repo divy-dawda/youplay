@@ -20,11 +20,19 @@ const uploadOnCloudinary = async (localFilePath) => {
         }
         return response;
     } catch (error) {
+        console.error("Cloudinary upload failed:", error?.message || error);
         // Remove locally saved temporary file on failure
         if (fs.existsSync(localFilePath)) {
             fs.unlinkSync(localFilePath);
         }
-        return null;
+        
+        let message = error?.message || "Failed to upload file to cloud storage";
+        if (message.toLowerCase().includes("file size") || message.toLowerCase().includes("maximum") || error?.http_code === 400) {
+            message = `Cloudinary rejected upload: ${message}`;
+        }
+        const err = new Error(message);
+        err.statusCode = error?.http_code || 400;
+        throw err;
     }
 };
 

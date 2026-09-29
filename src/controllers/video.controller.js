@@ -1,4 +1,5 @@
 import mongoose, { isValidObjectId } from "mongoose"
+import fs from "fs"
 import { Video } from "../models/video.models.js"
 import { User } from "../models/user.models.js"
 import { Comment } from "../models/comment.models.js"
@@ -115,6 +116,8 @@ const publishAVideo = asyncHandler(async (req, res) => {
 
     const videoFileLocalPath = req.files?.videoFile?.[0]?.path
     const thumbnailLocalPath = req.files?.thumbnail?.[0]?.path
+    const videoFileSize = req.files?.videoFile?.[0]?.size
+    const thumbnailSize = req.files?.thumbnail?.[0]?.size
 
     if (!videoFileLocalPath) {
         throw new ApiError(400, "Video file is required")
@@ -123,15 +126,43 @@ const publishAVideo = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Thumbnail file is required")
     }
 
-    const videoFile = await uploadOnCloudinary(videoFileLocalPath)
-    const thumbnail = await uploadOnCloudinary(thumbnailLocalPath)
+    const MAX_VIDEO_SIZE = 100 * 1024 * 1024 // 100 MB (Cloudinary Free limit)
+    const MAX_THUMBNAIL_SIZE = 10 * 1024 * 1024 // 10 MB
+
+    if (videoFileSize && videoFileSize > MAX_VIDEO_SIZE) {
+        if (fs.existsSync(videoFileLocalPath)) fs.unlinkSync(videoFileLocalPath)
+        if (thumbnailLocalPath && fs.existsSync(thumbnailLocalPath)) fs.unlinkSync(thumbnailLocalPath)
+        throw new ApiError(400, `Video file exceeds the maximum allowed size of 100 MB (${(videoFileSize / (1024 * 1024)).toFixed(1)} MB). Cloudinary free tier allows up to 100 MB per video.`)
+    }
+
+    if (thumbnailSize && thumbnailSize > MAX_THUMBNAIL_SIZE) {
+        if (videoFileLocalPath && fs.existsSync(videoFileLocalPath)) fs.unlinkSync(videoFileLocalPath)
+        if (fs.existsSync(thumbnailLocalPath)) fs.unlinkSync(thumbnailLocalPath)
+        throw new ApiError(400, "Thumbnail image exceeds the maximum allowed size of 10 MB.")
+    }
+
+    let videoFile
+    try {
+        videoFile = await uploadOnCloudinary(videoFileLocalPath)
+    } catch (err) {
+        if (thumbnailLocalPath && fs.existsSync(thumbnailLocalPath)) fs.unlinkSync(thumbnailLocalPath)
+        throw new ApiError(400, err?.message || "Failed to upload video file to cloud storage")
+    }
+
+    let thumbnail
+    try {
+        thumbnail = await uploadOnCloudinary(thumbnailLocalPath)
+    } catch (err) {
+        if (videoFile?.url) await deleteFromCloudinary(videoFile.url, "video")
+        throw new ApiError(400, err?.message || "Failed to upload thumbnail to cloud storage")
+    }
 
     if (!videoFile || !videoFile.url) {
-        if (thumbnail?.url) await deleteFromCloudinary(thumbnail.url, "image");
+        if (thumbnail?.url) await deleteFromCloudinary(thumbnail.url, "image")
         throw new ApiError(500, "Failed to upload video file to cloud storage")
     }
     if (!thumbnail || !thumbnail.url) {
-        if (videoFile?.url) await deleteFromCloudinary(videoFile.url, "video");
+        if (videoFile?.url) await deleteFromCloudinary(videoFile.url, "video")
         throw new ApiError(500, "Failed to upload thumbnail to cloud storage")
     }
 
@@ -283,8 +314,19 @@ const updateVideo = asyncHandler(async (req, res) => {
     }
 
     const thumbnailLocalPath = req.file?.path
+    const thumbnailSize = req.file?.size
     if (thumbnailLocalPath) {
-        const thumbnail = await uploadOnCloudinary(thumbnailLocalPath)
+        const MAX_THUMBNAIL_SIZE = 10 * 1024 * 1024
+        if (thumbnailSize && thumbnailSize > MAX_THUMBNAIL_SIZE) {
+            if (fs.existsSync(thumbnailLocalPath)) fs.unlinkSync(thumbnailLocalPath)
+            throw new ApiError(400, "Thumbnail image exceeds the maximum allowed size of 10 MB.")
+        }
+        let thumbnail
+        try {
+            thumbnail = await uploadOnCloudinary(thumbnailLocalPath)
+        } catch (err) {
+            throw new ApiError(400, err?.message || "Failed to upload thumbnail")
+        }
         if (!thumbnail || !thumbnail.url) {
             throw new ApiError(500, "Failed to upload thumbnail")
         }

@@ -17,7 +17,12 @@ import {
 import { dashboardApi, videoApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { formatViews, formatTimeAgo } from '../utils/format';
+import { formatViews, formatTimeAgo, formatFileSize } from '../utils/format';
+
+const MAX_VIDEO_SIZE_MB = 100;
+const MAX_VIDEO_SIZE = MAX_VIDEO_SIZE_MB * 1024 * 1024; // 100 MB (Cloudinary Free tier limit)
+const MAX_THUMBNAIL_SIZE_MB = 10;
+const MAX_THUMBNAIL_SIZE = MAX_THUMBNAIL_SIZE_MB * 1024 * 1024; // 10 MB
 
 export default function StudioPage() {
   const { user } = useAuth();
@@ -38,6 +43,8 @@ export default function StudioPage() {
   const [description, setDescription] = useState('');
   const [videoFile, setVideoFile] = useState(null);
   const [thumbnailFile, setThumbnailFile] = useState(null);
+  const [videoError, setVideoError] = useState(null);
+  const [thumbnailError, setThumbnailError] = useState(null);
   const [uploading, setUploading] = useState(false);
 
   const fetchStudioData = async () => {
@@ -63,10 +70,74 @@ export default function StudioPage() {
     }
   }, [user]);
 
+  const resetUploadModal = () => {
+    setShowUploadModal(false);
+    setTitle('');
+    setDescription('');
+    setVideoFile(null);
+    setThumbnailFile(null);
+    setVideoError(null);
+    setThumbnailError(null);
+  };
+
+  const handleVideoSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setVideoFile(null);
+      setVideoError(null);
+      return;
+    }
+
+    if (file.size > MAX_VIDEO_SIZE) {
+      const sizeStr = formatFileSize(file.size);
+      const msg = `File size (${sizeStr}) exceeds the ${MAX_VIDEO_SIZE_MB} MB limit allowed by Cloudinary. Please choose a smaller video.`;
+      setVideoError(msg);
+      setVideoFile(null);
+      e.target.value = '';
+      addToast(msg, 'error');
+      return;
+    }
+
+    setVideoError(null);
+    setVideoFile(file);
+  };
+
+  const handleThumbnailSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setThumbnailFile(null);
+      setThumbnailError(null);
+      return;
+    }
+
+    if (file.size > MAX_THUMBNAIL_SIZE) {
+      const sizeStr = formatFileSize(file.size);
+      const msg = `Thumbnail size (${sizeStr}) exceeds the ${MAX_THUMBNAIL_SIZE_MB} MB limit.`;
+      setThumbnailError(msg);
+      setThumbnailFile(null);
+      e.target.value = '';
+      addToast(msg, 'error');
+      return;
+    }
+
+    setThumbnailError(null);
+    setThumbnailFile(file);
+  };
+
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim() || !description.trim() || !videoFile || !thumbnailFile) {
       addToast('Please fill all fields and select both video and thumbnail files', 'error');
+      return;
+    }
+
+    if (videoFile.size > MAX_VIDEO_SIZE) {
+      addToast(`Video exceeds the ${MAX_VIDEO_SIZE_MB} MB limit (${formatFileSize(videoFile.size)}). Please choose a smaller video.`, 'error');
+      return;
+    }
+
+    if (thumbnailFile.size > MAX_THUMBNAIL_SIZE) {
+      addToast(`Thumbnail exceeds the ${MAX_THUMBNAIL_SIZE_MB} MB limit.`, 'error');
       return;
     }
 
@@ -80,11 +151,7 @@ export default function StudioPage() {
 
       await videoApi.publishVideo(formData);
       addToast('Video uploaded and published successfully!');
-      setShowUploadModal(false);
-      setTitle('');
-      setDescription('');
-      setVideoFile(null);
-      setThumbnailFile(null);
+      resetUploadModal();
       fetchStudioData();
     } catch (err) {
       addToast(err.message || 'Failed to upload video', 'error');
@@ -311,8 +378,8 @@ export default function StudioPage() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-lg text-white">Upload New Video</h3>
               <button
-                onClick={() => setShowUploadModal(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg"
+                onClick={resetUploadModal}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -347,45 +414,84 @@ export default function StudioPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Video File (.mp4, .mov, etc.) *
-                </label>
+              {/* Video File Input */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300">
+                    Video File (.mp4, .webm, .mov) *
+                  </label>
+                  <span className="text-[11px] font-semibold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
+                    Max: {MAX_VIDEO_SIZE_MB} MB
+                  </span>
+                </div>
                 <input
                   type="file"
-                  accept="video/*"
-                  onChange={(e) => setVideoFile(e.target.files[0])}
+                  accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*"
+                  onChange={handleVideoSelect}
                   required
                   className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-red-600 file:text-white hover:file:bg-red-500 cursor-pointer"
                 />
+                {videoFile && !videoError && (
+                  <p className="text-[11px] text-emerald-400 flex items-center gap-1.5 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Selected: {videoFile.name} ({formatFileSize(videoFile.size)})</span>
+                  </p>
+                )}
+                {videoError && (
+                  <div className="text-xs text-rose-300 flex items-start gap-2 bg-rose-950/40 p-2.5 rounded-xl border border-rose-900/60">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                    <span>{videoError}</span>
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-500">
+                  Cloudinary limits video uploads to {MAX_VIDEO_SIZE_MB} MB on the free tier.
+                </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Thumbnail Image (.jpg, .png) *
-                </label>
+              {/* Thumbnail Image Input */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300">
+                    Thumbnail Image (.jpg, .png, .webp) *
+                  </label>
+                  <span className="text-[11px] font-semibold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
+                    Max: {MAX_THUMBNAIL_SIZE_MB} MB
+                  </span>
+                </div>
                 <input
                   type="file"
-                  accept="image/*"
-                  onChange={(e) => setThumbnailFile(e.target.files[0])}
+                  accept="image/jpeg,image/png,image/webp,image/*"
+                  onChange={handleThumbnailSelect}
                   required
                   className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-700 file:text-white hover:file:bg-slate-600 cursor-pointer"
                 />
+                {thumbnailFile && !thumbnailError && (
+                  <p className="text-[11px] text-emerald-400 flex items-center gap-1.5 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Selected: {thumbnailFile.name} ({formatFileSize(thumbnailFile.size)})</span>
+                  </p>
+                )}
+                {thumbnailError && (
+                  <div className="text-xs text-rose-300 flex items-start gap-2 bg-rose-950/40 p-2.5 rounded-xl border border-rose-900/60">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                    <span>{thumbnailError}</span>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   disabled={uploading}
-                  onClick={() => setShowUploadModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
+                  onClick={resetUploadModal}
+                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={uploading}
-                  className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all"
+                  disabled={uploading || !!videoError || !!thumbnailError}
+                  className="flex items-center gap-2 px-5 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer"
                 >
                   {uploading ? (
                     <>

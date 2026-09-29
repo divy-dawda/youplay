@@ -41,3 +41,11 @@ export function formatTimeAgo(dateString) {
   const years = Math.floor(days / 365);
   return `${years}y ago`;
 }
+
+export function formatFileSize(bytes = 0) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1).replace(/\.0$/, '')} ${sizes[i]}`;
+}
